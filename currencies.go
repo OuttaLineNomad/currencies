@@ -3,18 +3,23 @@ package currencies
 import (
 	"encoding/json"
 	"io/ioutil"
+	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// Rates struct for json response.
-type Rates struct {
-	Disclaimer string             `json:"disclaimer"`
-	License    string             `json:"license"`
-	Timestamp  int                `json:"timestamp"`
-	Base       string             `json:"base"`
-	Rates      map[string]float32 `json:"rates"`
+// RatesResponse struct for json response.
+type RatesResponse struct {
+	Disclaimer string `json:"disclaimer"`
+	License    string `json:"license"`
+	Timestamp  int    `json:"timestamp"`
+	Base       string `json:"base"`
+	Rates      Rates  `json:"rates"`
 }
+
+// Rates map of symboles and rates from api.
+type Rates map[string]float64
 
 // APIClient base for currencies package.
 type APIClient struct {
@@ -39,21 +44,27 @@ func New(appID string) *APIClient {
 	return &APIClient{"https://openexchangerates.org/api/", appID}
 }
 
-// ConvertNow gets latest rate and converts the amount.
-func (a *APIClient) ConvertNow(from, to string, amount float32) (float32, error) {
-	rate, err := a.GetLatestRates(to, from)
+// ConvertNow gets latest rate and converts the amount in base currency.
+func (a *APIClient) ConvertNow(from, to string, amt float64) (float64, error) {
+	rates, err := a.GetLatestRates(to, from)
 	if err != nil {
 		return 0, err
 	}
-	return rate.Rates[to], nil
+
+	rate := rates[to]
+	return math.Round(amt * rate), nil
 }
 
 // GetLatestRates gets latest rates for symbols in list, or if list nil sends all rates.
-func (a *APIClient) GetLatestRates(base string, symboles ...string) (*Rates, error) {
-	return a.rates("latest.json", base, symboles)
+func (a *APIClient) GetLatestRates(base string, symboles ...string) (Rates, error) {
+	rates, err := a.rates("latest.json", base, symboles)
+	if err != nil {
+		return nil, err
+	}
+	return rates.Rates, nil
 }
 
-func (a *APIClient) rates(endpoint, base string, symboles []string) (*Rates, error) {
+func (a *APIClient) rates(endpoint, base string, symboles []string) (*RatesResponse, error) {
 	url := a.baseURL + "/" + endpoint
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -64,14 +75,25 @@ func (a *APIClient) rates(endpoint, base string, symboles []string) (*Rates, err
 	q.Add("app_id", a.appID)
 
 	if base == "" {
+		req.URL.RawQuery = q.Encode()
 		return a.callAPI(req)
 	}
 
-	return nil, nil
+	if symboles == nil {
+		q.Add("base", base)
+		req.URL.RawQuery = q.Encode()
+		return a.callAPI(req)
+	}
+
+	symbolesStr := strings.Join(symboles, ",")
+	q.Add("symboles", symbolesStr)
+	req.URL.RawQuery = q.Encode()
+
+	return a.callAPI(req)
 }
 
 // callAPI calles api with request given and reters rates.
-func (a *APIClient) callAPI(req *http.Request) (*Rates, error) {
+func (a *APIClient) callAPI(req *http.Request) (*RatesResponse, error) {
 
 	client := &http.Client{
 		Timeout: time.Second * 30,
@@ -97,7 +119,7 @@ func (a *APIClient) callAPI(req *http.Request) (*Rates, error) {
 		return nil, err
 	}
 
-	rates := &Rates{}
+	rates := &RatesResponse{}
 
 	err = json.Unmarshal(b, rates)
 	if err != nil {
