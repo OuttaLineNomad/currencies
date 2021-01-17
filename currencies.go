@@ -46,13 +46,13 @@ func New(appID string) *APIClient {
 
 // ConvertNow gets latest rate and converts the amount in base currency.
 func (a *APIClient) ConvertNow(from, to string, amt float64) (float64, error) {
-	rates, err := a.GetLatestRates(to, from)
+	rates, err := a.GetLatestRates(from, to)
 	if err != nil {
 		return 0, err
 	}
 
 	rate := rates[to]
-	return math.Round(amt * rate), nil
+	return math.Round((amt*rate)*100) / 100, nil
 }
 
 // GetLatestRates gets latest rates for symbols in list, or if list nil sends all rates.
@@ -65,7 +65,7 @@ func (a *APIClient) GetLatestRates(base string, symboles ...string) (Rates, erro
 }
 
 func (a *APIClient) rates(endpoint, base string, symboles []string) (*RatesResponse, error) {
-	url := a.baseURL + "/" + endpoint
+	url := a.baseURL + endpoint
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -125,6 +125,5 @@ func (a *APIClient) callAPI(req *http.Request) (*RatesResponse, error) {
 	if err != nil {
 		return nil, &Error{Message: "json.Unmarshal() stat 200", Description: err.Error()}
 	}
-
 	return rates, nil
 }
