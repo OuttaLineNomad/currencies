@@ -111,12 +111,12 @@ func (a *APIClient) callAPI(req *http.Request) (*RatesResponse, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		err = &Error{}
-		err = json.Unmarshal(b, err)
+		errMSG := &Error{}
+		err = json.Unmarshal(b, errMSG)
 		if err != nil {
 			return nil, &Error{Message: "json.Unmarshal() stat !200", Description: err.Error()}
 		}
-		return nil, err
+		return nil, errMSG
 	}
 
 	rates := &RatesResponse{}
